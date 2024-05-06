@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Template for provisioning networking resources
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name used in all resources tagging
+    Type: String
+    Default: Test
+
+  VpcCIDR:
+    Description: CIDR range for VPC
+    Type: String
+    Default: 192.168.1.0/24
+
+  AvailabilityZone:
+    Description: Availability Zone name
+    Type: String
+    Default: eu-central-1a
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress VPC
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZone
+      CidrBlock: !Select [ 0, !Cidr [ !Ref VpcCIDR, 2, 6 ] ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: Public WordPress Subnet
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress Internet Gateway
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress Public Route Table
+
+  InternetGatewayRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Ref AvailabilityZone
+      CidrBlock: !Select [ 1, !Cidr [ !Ref VpcCIDR, 2, 6 ] ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: Private WordPress Subnet
+
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: EIP for Nat Gateway
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress NAT Gateway
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress Private Route Table
+
+  NatGatewayRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet
+
+Outputs:
+  VpcId:
+    Value: !GetAtt VPC.VpcId
+    Export:
+      Name: !Sub '${AWS::StackName}-VpcId'
+  PublicSubnetId:
+    Value: !GetAtt PublicSubnet.SubnetId
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicSubnetId'
+  PrivateSubnetId:
+    Value: !GetAtt PrivateSubnet.SubnetId
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnetId'

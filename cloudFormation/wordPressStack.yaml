@@ -93,21 +93,14 @@ Resources:
           sed -i 's/'password_here'/'$DB_PASSWORD'/g' wp-config.php
           sed -i 's/'localhost'/'${RDSInstance.Endpoint.Address}'/g' wp-config.php
           // Generate self-signed certificate
-          mkdir certificate && cd certificate
-          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-          PUBLIC_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
           openssl genrsa -aes256 -passout pass:dummyPassword -out server.pass.key 4096
           openssl rsa -passin pass:dummyPassword -in server.pass.key -out server.key
           rm -f server.pass.key
-          openssl req -new -key server.key -out server.csr -subj "/C=PL/O=mmokijewski/CN=wordpress.mmokijewski.pl" -addext "subjectAltName=DNS:wordpress.mmokijewski.pl,DNS:$PUBLIC_IP"
+          openssl req -new -key server.key -out server.csr -subj "/C=PL/O=mmokijewski/CN=mmokijewski.pl" -addext "subjectAltName=DNS:mmokijewski.pl"
           openssl x509 -req -sha256 -days 365 -in server.csr -signkey server.key -out server.crt
-          echo "<VirtualHost localhost:443>" >> /etc/httpd/conf/httpd.conf
-          echo "  DocumentRoot /var/www/html" >> /etc/httpd/conf/httpd.conf
-          echo "  ServerName wordpress.mmokijewski.pl" >> /etc/httpd/conf/httpd.conf
-          echo "  SSLEngine on" >> /etc/httpd/conf/httpd.conf
-          echo "  SSLCertificateFile /var/www/html/certificate/server.crt" >> /etc/httpd/conf/httpd.conf
-          echo "  SSLCertificateKeyFile /var/www/html/certificate/server.key" >> /etc/httpd/conf/httpd.conf
-          echo "</VirtualHost>" >> /etc/httpd/conf/httpd.conf
+          rm server.csr
+          mv -f server.crt /etc/pki/tls/certs/localhost.crt
+          mv -f server.key /etc/pki/tls/private/localhost.key
           systemctl restart httpd
       SecurityGroupIds: [ !Ref ServerSecurityGroup ]
       Tags:

@@ -27,6 +27,7 @@ jobs:
         with:
           name: networking
           template: cloudFormation/networking.yaml
+          no-fail-on-empty-changeset: "1"
 
       - name: Deploy AWS CloudFormation - WordPress stack
         uses: aws-actions/aws-cloudformation-github-deploy@v1
@@ -34,6 +35,7 @@ jobs:
           name: wordPressStack
           template: cloudFormation/wordPressStack.yaml
           capabilities: CAPABILITY_NAMED_IAM
+          no-fail-on-empty-changeset: "1"
 
       - name: Print server public IP
         run: |

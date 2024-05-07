@@ -1,0 +1,159 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Template for provisioning WordPress server
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name used in all resources tagging
+    Type: String
+    Default: Test
+
+  AMI:
+    Description: AMI ID to be used for provisioning instance
+    Type: String
+    Default: ami-098c93bd9d119c051
+
+  InstanceType:
+    Description: Instance type to be used
+    Type: String
+    Default: t2.micro
+
+Resources:
+  WordPressServerIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: Role for WordPress EC2 Server
+      Policies:
+        - PolicyName: wordPressServerPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 'secretsmanager:GetSecretValue'
+                Resource: !GetAtt RDSInstance.MasterUserSecret.SecretArn
+      RoleName: wordPressIamRole
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress IAM Role
+
+  WordPressInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: WordPressProfile
+      Roles:
+        - !Ref WordPressServerIamRole
+
+  EC2Instance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      ImageId: !Ref AMI
+      InstanceType: !Ref InstanceType
+      SubnetId: !ImportValue networking-PublicSubnetId
+      IamInstanceProfile: !Ref WordPressInstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf update -y
+          dnf install -y httpd php php-mysqlnd
+          systemctl enable httpd
+          systemctl start httpd
+          echo "<?php phpinfo(); ?>" > /var/www/html/phpinfo.php
+          wget https://wordpress.org/latest.tar.gz
+          tar -xzf latest.tar.gz
+          cp -R wordpress/* /var/www/html/
+          rm -rf wordpress latest.tar.gz
+          chown -R apache:apache /var/www/html
+          chmod -R 755 /var/www/html
+          cd /var/www/html
+          mv wp-config-sample.php wp-config.php
+          SECRETS=$(aws secretsmanager get-secret-value --secret-id '${RDSInstance.MasterUserSecret.SecretArn}' | jq -r .SecretString)
+          DB_USERNAME=$(echo $SECRETS | jq -r .username)
+          DB_PASSWORD=$(echo $SECRETS | jq -r .password)
+          sed -i 's/'database_name_here'/'WordPressMySQL'/g' wp-config.php
+          sed -i 's/'username_here'/'$DB_USERNAME'/g' wp-config.php
+          sed -i 's/'password_here'/'$DB_PASSWORD'/g' wp-config.php
+          sed -i 's/'localhost'/'${RDSInstance.Endpoint.Address}'/g' wp-config.php
+          systemctl restart httpd
+      SecurityGroupIds: [ !Ref ServerSecurityGroup ]
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress Server
+
+  ServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Enable HTTPS access to the server"
+      GroupName: WordPress Security Group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress Security Group
+      VpcId: !ImportValue networking-VpcId
+
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for WordPress RDS
+      DBSubnetGroupName: WordPress RDS Subnet Group
+      SubnetIds:
+        - !ImportValue networking-PrivateSubnetId-1
+        - !ImportValue networking-PrivateSubnetId-2
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress RDS Subnet Group
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow specific access to RDS"
+      GroupName: RDS Security Group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref ServerSecurityGroup
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress Security Group
+      VpcId: !ImportValue networking-VpcId
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: WordPressMySQL
+      DBInstanceClass: db.t3.micro
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      VPCSecurityGroups: [ !Ref RDSSecurityGroup ]
+      AllocatedStorage: 5
+      Engine: MySQL
+      EngineVersion: '8.0'
+      MasterUsername: wp_admin
+      ManageMasterUserPassword: true
+      PubliclyAccessible: false
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: WordPress RDS

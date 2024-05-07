@@ -157,3 +157,7 @@ Resources:
           Value: !Ref EnvironmentName
         - Key: Name
           Value: WordPress RDS
+
+Outputs:
+  publicIp:
+    Value: !GetAtt EC2Instance.PublicIp

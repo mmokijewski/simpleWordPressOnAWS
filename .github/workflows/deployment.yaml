@@ -33,6 +33,7 @@ jobs:
         with:
           name: wordPressStack
           template: cloudFormation/wordPressStack.yaml
+          capabilities: CAPABILITY_NAMED_IAM
 
       - name: Print server public IP
         run: |

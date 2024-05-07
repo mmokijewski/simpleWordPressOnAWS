@@ -12,10 +12,10 @@ Parameters:
     Type: String
     Default: 192.168.1.0/24
 
-  AvailabilityZone:
-    Description: Availability Zone name
-    Type: String
-    Default: eu-central-1a
+  AvailabilityZones:
+    Description: Availability Zones names
+    Type: CommaDelimitedList
+    Default: 'eu-central-1a,eu-central-1b'
 
 Resources:
   VPC:
@@ -32,8 +32,8 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Ref AvailabilityZone
-      CidrBlock: !Select [ 0, !Cidr [ !Ref VpcCIDR, 2, 6 ] ]
+      AvailabilityZone: !Select [ 0 , !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 0, !Cidr [ !Ref VpcCIDR, 4, 6 ] ]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Environment
@@ -80,18 +80,31 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet
 
-  PrivateSubnet:
+  PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Ref AvailabilityZone
-      CidrBlock: !Select [ 1, !Cidr [ !Ref VpcCIDR, 2, 6 ] ]
+      AvailabilityZone: !Select [ 0, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 2, !Cidr [ !Ref VpcCIDR, 4, 6 ] ]
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
         - Key: Name
-          Value: Private WordPress Subnet
+          Value: Private WordPress Subnet 1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !Ref AvailabilityZones ]
+      CidrBlock: !Select [ 3, !Cidr [ !Ref VpcCIDR, 4, 6 ] ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Name
+          Value: Private WordPress Subnet 1
 
   NatGatewayEIP:
     Type: AWS::EC2::EIP
@@ -132,11 +145,17 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref NatGateway
 
-  PrivateRouteTableAssociation:
+  PrivateRouteTableAssociation1:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PrivateRouteTable
-      SubnetId: !Ref PrivateSubnet
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet2
 
 Outputs:
   VpcId:
@@ -147,7 +166,11 @@ Outputs:
     Value: !GetAtt PublicSubnet.SubnetId
     Export:
       Name: !Sub '${AWS::StackName}-PublicSubnetId'
-  PrivateSubnetId:
-    Value: !GetAtt PrivateSubnet.SubnetId
+  PrivateSubnetId1:
+    Value: !GetAtt PrivateSubnet1.SubnetId
     Export:
-      Name: !Sub '${AWS::StackName}-PrivateSubnetId'
+      Name: !Sub '${AWS::StackName}-PrivateSubnetId-1'
+  PrivateSubnetId2:
+    Value: !GetAtt PrivateSubnet2.SubnetId
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnetId-2'

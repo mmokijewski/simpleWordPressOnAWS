@@ -177,6 +177,7 @@ Resources:
       MasterUsername: wp_admin
       ManageMasterUserPassword: true
       PubliclyAccessible: false
+      BackupRetentionPeriod: 0
       Tags:
         - Key: Environment
           Value: !Ref EnvironmentName
